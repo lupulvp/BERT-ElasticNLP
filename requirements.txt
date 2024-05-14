@@ -1,5 +1,5 @@
-elasticsearch 
-transformers
-datasets 
-python-dotenv
+elasticsearch==8.13.1
+transformers==4.40.2
+datasets==2.19.1 
+python-dotenv==1.0.1
 torch==1.13
