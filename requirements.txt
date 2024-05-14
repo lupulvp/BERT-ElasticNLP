@@ -1,0 +1,5 @@
+elasticsearch 
+transformers
+datasets 
+python-dotenv
+torch==1.13
