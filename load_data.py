@@ -1,36 +1,24 @@
 import os
 import torch
 from transformers import AutoTokenizer, AutoModel
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, helpers
 from datasets import load_dataset
-
 from dotenv import load_dotenv
-load_dotenv() 
-data_index = os.getenv("DATA_INDEX")
-es_host = os.getenv("ES_HOST")
 
-print("Connecting to the Elasticsearch cluster...")
-es = Elasticsearch([es_host], verify_certs=False)
+load_dotenv()
 
-print('Load the BERT tokenizer and model')
-tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
-model = AutoModel.from_pretrained('bert-base-uncased')
 
-# Check if the index exists, delete it if it does
-if es.indices.exists(index=data_index):
-    print("Deleting the index...")
-    es.indices.delete(index=data_index)
+def create_index(es, data_index):
+    if es.indices.exists(index=data_index):
+        print("Deleting the index...")
+        es.indices.delete(index=data_index)
 
-# if the index does not exist, create it with the defined mapping
-if not es.indices.exists(index=data_index):
     print("Creating the index...")
-
-    # Define the mapping for the dense vector field
     mapping = {
         'properties': {
             'embedding': {
                 'type': 'dense_vector',
-                'dims': 768,  # the number of dimensions of the dense vector
+                'dims': 768,
                 'index': 'true',
                 "similarity": "cosine"
             }
@@ -38,35 +26,74 @@ if not es.indices.exists(index=data_index):
     }
     es.indices.create(index=data_index, body={'mappings': mapping})
 
-    print("Loading the data and indexing it in Elasticsearch...")
-    imdb_dataset = load_dataset("imdb", split="train")
 
-    inserted_count = 0
-    print(f"Indexing {len(imdb_dataset)} documents")
-    for item in imdb_dataset:
-        # print(item)
-        text = item.get('text', None)
-        label = item.get('label', -1)
+def main():
+    data_index = os.getenv("DATA_INDEX")
+    es_host = os.getenv("ES_HOST")
+    es_batch_size = os.getenv("ES_BATCH_SIZE", 10)
 
-        if text is None:
-            continue
+    if not data_index or not es_host:
+        raise ValueError(
+            "Environment variables DATA_INDEX or ES_HOST are not set.")
 
-        inputs = tokenizer(text, return_tensors='pt',
-                           padding=True, truncation=True)
-        output = None
-        with torch.no_grad():
-            output = model(**inputs).last_hidden_state.mean(dim=1).squeeze(0).numpy()  # noqa
+    print("Connecting to the Elasticsearch cluster...")
+    es = Elasticsearch([es_host], verify_certs=False)
+    if not es.ping():
+        raise ConnectionError("Failed to connect to Elasticsearch.")
 
-        item_body = {
-            'text': text,
-            'label': label,
-            'embedding': output.tolist(),
-        }
+    try:
+        print('Load the BERT tokenizer and model')
+        tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        model = AutoModel.from_pretrained('bert-base-uncased')
+    except Exception as e:
+        print(f"Error during initialization: {e}")
+        exit(1)
 
-        es.index(index=data_index, body=item_body)
+    try:
+        print("Creating the Elasticsearch index...")
+        create_index(es, data_index)
+    except Exception as e:
+        print(f"Error handling Elasticsearch index: {e}")
+        raise e
 
-        inserted_count += 1
-        if inserted_count % 1000 == 0:
-            print(f"Indexed {inserted_count} documents")
-else:
-    print("The index already exists. Skipping the data loading and indexing.")
+    try:
+        print("Loading the data and indexing it in Elasticsearch...")
+        imdb_dataset = load_dataset("imdb", split="train")
+        actions = []
+
+        print(f"Indexing {len(imdb_dataset)} documents")
+        for i, item in enumerate(imdb_dataset):
+            text = item.get('text', None)
+            label = item.get('label', -1)
+
+            if text is None:
+                continue
+
+            inputs = tokenizer(text, return_tensors='pt', padding=True, truncation=True)  # noqa
+            with torch.no_grad():
+                output = model(**inputs).last_hidden_state.mean(dim=1).squeeze(0).numpy()  # noqa
+
+            action = {
+                "_index": data_index,
+                "_source": {
+                    'text': text,
+                    'label': label,
+                    'embedding': output.tolist(),
+                }
+            }
+            actions.append(action)
+
+            if len(actions) >= es_batch_size:
+                helpers.bulk(es, actions)
+                actions = []  # clear actions after processing
+                print(f"Indexed {i+1} documents")
+
+        if actions:  # index remaining documents
+            helpers.bulk(es, actions)
+    except Exception as e:
+        print(f"Error during data processing and indexing: {e}")
+        raise e
+
+
+if __name__ == "__main__":
+    main()
