@@ -5,11 +5,14 @@ from transformers import AutoTokenizer, AutoModel
 from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
 
+DEFAULT_DATA_INDEX = "data-index"
+DEFAULT_ES_HOST = "http://localhost:9200"
+
 
 def main(query, number_of_results):
     load_dotenv()
-    data_index = os.getenv("DATA_INDEX")
-    es_host = os.getenv("ES_HOST")
+    data_index = os.getenv("DATA_INDEX") or DEFAULT_DATA_INDEX
+    es_host = os.getenv("ES_HOST") or DEFAULT_ES_HOST
 
     if not data_index or not es_host:
         raise ValueError("Environment variables DATA_INDEX or ES_HOST are not set.")  # noqa
@@ -29,12 +32,14 @@ def main(query, number_of_results):
 
     try:
         print('Define a query text and convert it to a dense vector using BERT')
-        inputs = tokenizer(query, return_tensors='pt', padding=True, truncation=True)  # noqa
-        with torch.no_grad():
-            output = model(**inputs).last_hidden_state.mean(dim=1).squeeze(0).numpy()  # noqa
-        query_vector = output.tolist()
 
-    except Exception as e:
+
+inputs = tokenizer(query, return_tensors='pt', padding=True, truncation=True)  # noqa
+with torch.no_grad():
+    output = model(**inputs).last_hidden_state.mean(dim=1).squeeze(0).numpy()  # noqa
+query_vector = output.tolist()
+
+   except Exception as e:
         print(f"An error occurred: {e}")
         raise e
 

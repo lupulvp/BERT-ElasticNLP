@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DEFAULT_DATA_INDEX = "data-index"
+DEFAULT_ES_HOST = "http://localhost:9200"
+
 
 def create_index(es, data_index):
     if es.indices.exists(index=data_index):
@@ -28,8 +31,8 @@ def create_index(es, data_index):
 
 
 def main():
-    data_index = os.getenv("DATA_INDEX")
-    es_host = os.getenv("ES_HOST")
+    data_index = os.getenv("DATA_INDEX") or DEFAULT_DATA_INDEX
+    es_host = os.getenv("ES_HOST") or DEFAULT_ES_HOST
     es_batch_size = os.getenv("ES_BATCH_SIZE", 10)
 
     if not data_index or not es_host:

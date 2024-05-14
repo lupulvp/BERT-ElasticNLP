@@ -9,11 +9,6 @@ This project integrates Elasticsearch with BERT (Bidirectional Encoder Represent
 - Python 3.8+
 - Libraries: `torch`, `transformers`, `elasticsearch`, `datasets`, `python-dotenv`
 
-Install them using pip:
-```bash
-pip install -r requirements.txt
-```
-
 ## Setup
 ### 1. Clone the repo
 
@@ -29,21 +24,26 @@ Copy the .env-template file to a new file named .env and update the environment 
 cp .env-template .env
 ```
 
-### 3. Elasticsearch and Kibana:
+### 3. Install requirements
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Elasticsearch and Kibana:
 Start the services using Docker Compose:
 
 ```bash
 docker-compose up -d
 ```
 
-### 4. Index Data:
+### 5. Index Data:
 Run the load_data.py script to load and index the data:
 
 ```bash
 python load_data.py
 ```
 
-### 5. Query Data:
+### 6. Query Data:
 Use the query_data.py script to query the indexed data. Example:
 
 ```bash
